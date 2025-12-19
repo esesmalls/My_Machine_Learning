@@ -23,7 +23,7 @@ class Value:
     other = other if isinstance(other, Value) else Value(other)
     out = Value(self.data + other.data, (self, other), '+')
     
-    def _backward():
+    def _backward():#闭包
       self.grad += 1.0 * out.grad
       other.grad += 1.0 * out.grad
     out._backward = _backward
@@ -218,6 +218,7 @@ for k in range(20):
     loss = sum(((yout-ygt)**2 for ygt, yout in zip(ys, ypred)), Value(0))
     #在对T的参数梯度重置后，无需再对loss进行梯度重置，循环变量
     #ygt，yout的grad继承ys和ypred，而且不会累加，ys是常量0梯度，ypred继承T参数梯度
+    #另外，被减的ygt是ys常量，画图过程中不会产生多余节点，如果反过来会吗？
     loss.backward()
     
     for p in T.parameters():
