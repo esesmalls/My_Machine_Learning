@@ -6,6 +6,21 @@ from graphviz import Digraph
 
 
 ##操作数（Value）、算子、计算图和反向传播实现
+def combine_binary_labels(method):
+  def wrapper(self, other, *args, **kwargs):
+    out = method(self, other, *args, **kwargs)
+    other_val = other if hasattr(other, 'label') else None
+    if other_val is None and hasattr(out, '_prev'):
+      for p in out._prev:
+        if p is not self:
+          other_val = p
+          break
+    if getattr(self, 'label', '') and getattr(other_val, 'label', ''):
+      if not getattr(out, 'label', ''):
+        out.label = f"{self.label}{other_val.label}"
+    return out
+  return wrapper
+
 class Value:
   
   def __init__(self, data, _children=(), _op='', label=''):
@@ -15,26 +30,23 @@ class Value:
     self._prev = set(_children)
     self._op = _op
     self.label = label
-    # 如果当前 label 为空，且父节点中至少两个 label 非空，则用这些非空 label 拼接作为当前 label
-    if not self.label:
-      child_labels = [c.label for c in _children if hasattr(c, 'label') and c.label]
-      if len(child_labels) >= 2:
-        self.label = "".join(child_labels)
-
+        
   def __repr__(self):#fallback string representation
     return f"Value(data={self.data})"
   
+  @combine_binary_labels
   def __add__(self, other):#overload + operator
     other = other if isinstance(other, Value) else Value(other)
     out = Value(self.data + other.data, (self, other), '+')
     
-    def _backward():#闭包
+    def _backward():
       self.grad += 1.0 * out.grad
       other.grad += 1.0 * out.grad
     out._backward = _backward
     
     return out
 
+  @combine_binary_labels
   def __mul__(self, other): #overload * operator
     other = other if  isinstance(other, Value) else Value(other)
     out = Value(self.data * other.data, (self, other), '*')
@@ -49,6 +61,7 @@ class Value:
   def __rmul__(self, other):  #right-side multiplication
     return self * other
   
+  @combine_binary_labels
   def __pow__(self, other): #overload ** operator
     out = Value(self.data**other, (self, ), f'**{other}')
     
@@ -148,29 +161,33 @@ def draw_dot(root):
   return dot
 
 ##多层感知机（MLP）实现
+# 下标装饰器函数：将数字转换为Unicode下标字符
+def subscript(n):
+    """将数字转换为下标形式，供所有类和函数使用"""
+    digits = "₀₁₂₃₄₅₆₇₈₉"
+    return "".join(digits[int(ch)] for ch in str(n))
+
 ##单个神经元实现
 class Neuron:
     def __init__(self, nin, layer_idx=1, neuron_idx=1):
+        # 使用下标风格的参数标签 w_{层,神经元,输入} 和 b_{层,神经元}
         self.layer_idx = layer_idx
         self.neuron_idx = neuron_idx
-        # 将索引数字转为下标字符，便于在图中以下标形式展示
-        digits = "₀₁₂₃₄₅₆₇₈₉"
-        def sub(n):
-            return "".join(digits[int(ch)] for ch in str(n))
-        # 使用下标风格的参数标签 w_{层,神经元,输入} 和 b_{层,神经元}
-        self.w = [Value(np.random.uniform(-1, 1), label=f"w{sub(layer_idx)}{sub(neuron_idx)}{sub(i+1)}") for i in range(nin)]#[]用于收集成为列表，作为神经元输入的权重
-        self.b = Value(np.random.uniform(-1, 1), label=f"b{sub(layer_idx)}{sub(neuron_idx)}")#偏置用于控制神经元整体的触发频率
+        self.w = [Value(np.random.uniform(-1, 1), label=f"w{subscript(self.layer_idx)}{subscript(self.neuron_idx)}{subscript(i+1)}") for i in range(nin)]#[]用于收集成为列表，作为神经元输入的权重
+        self.b = Value(np.random.uniform(-1, 1), label=f"b{subscript(self.layer_idx)}{subscript(self.neuron_idx)}")#偏置用于控制神经元整体的触发频率
         
     def __call__(self, x):
         #n=n(x)=n.__call__(x)=w*x+b
         act = sum((wi*xi for wi, xi in zip(self.w, x)), self.b)#self.b作为sum的初始值,可以增加计算效率
         #wi*xi for wi, xi in zip(self.w, x)作为生成器表达式，在python中必须用括号包裹
         out = act.tanh()
+        out.label = f"n{subscript(self.layer_idx)}{subscript(self.neuron_idx)}"
         return out
     
     def parameters(self):
         #收集Neuron参数，输出向量格式
         return self.w + [self.b]
+    
     
 ##单层神经网络实现
 class Layer:
@@ -213,7 +230,15 @@ xs = [
 ]
 
 ys = [1.0, -1.0, -1.0, 1.0]##这是期望输出，看得出来是一个二分类问题
+
+## Value化xs和ys，并增加label,例如x₁₁和y₁（使用下标）
+xs = [[Value(xi, label=f"x{subscript(i+1)}{subscript(j+1)}") for j, xi in enumerate(x)] for i, x in enumerate(xs)]
+ys = [Value(yi, label=f"y{subscript(i+1)}") for i, yi in enumerate(ys)]
+
+## 预测输出，并增加label，如yp₁（使用下标）
 ypred = [T(x) for x in xs]
+for i, yp in enumerate(ypred):
+    yp.label = f"yp{subscript(i+1)}"
 
 for k in range(20):
 
