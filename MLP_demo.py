@@ -15,6 +15,11 @@ class Value:
     self._prev = set(_children)
     self._op = _op
     self.label = label
+    # 如果当前 label 为空，且父节点中至少两个 label 非空，则用这些非空 label 拼接作为当前 label
+    if not self.label:
+      child_labels = [c.label for c in _children if hasattr(c, 'label') and c.label]
+      if len(child_labels) >= 2:
+        self.label = "".join(child_labels)
 
   def __repr__(self):#fallback string representation
     return f"Value(data={self.data})"
