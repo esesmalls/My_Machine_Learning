@@ -1,8 +1,9 @@
 #set page(width: 10cm, height: auto)
 #set heading(numbering: "1.")
-
-= Fibonacci sequnece
-The Fibonacci sequence is defined through the recurrence relation $F_n = F_{n-1} + F_{n-2}$.
+#let t1 = $n-1$
+#let t2 = $n-2$
+= Fibonacci  sequence
+The Fibonacci sequence is defined through the recurrence relation $F_n = F_t1 + F_t2$.
 It can also be expressed in _closed form:_
 
 $ F_n = round(1 / sqrt(5) phi.alt^n), quad
